@@ -1,0 +1,81 @@
+#!/usr/bin/python3 -I
+"""Sync the F10 camera LED with the webcam state on the ASUS Zenbook UX7602.
+
+The firmware blocks/unblocks the webcam on Fn+F10 itself and reports the new
+state as a raw vendor report (5a 85 <state>) on the keyboard's hotkey
+interface, but leaves the key's LED alone. The LED is a GPIO behind WMI
+device 0x00060078, which only accepts 5 (lit) and 4 (off); the kernel has no
+LED class device for it, so go through the asus-nb-wmi debugfs interface.
+"""
+import glob, os, shutil, subprocess, sys, time
+
+NAME = "asus-camera-led"
+DBG = "/sys/kernel/debug/asus-nb-wmi"
+CAMERA_REPORT = (0x5A, 0x85)  # followed by <state>
+BLOCKED = {0x10: True, 0x01: False}
+EX_CONFIG = 78  # permanent problem: the unit does not restart on this status
+
+
+def check_prerequisites():
+    """Fail once, clearly, instead of crash-looping under Restart=always."""
+    # access(2) says yes for root even under lockdown; only open(2) tells.
+    try:
+        os.close(os.open(DBG + "/ctrl_param", os.O_WRONLY))
+    except OSError as e:
+        fatal(f"cannot open {DBG}/ctrl_param for writing ({e.strerror}): debugfs is "
+              "not mounted, asus-nb-wmi is not loaded, or kernel lockdown (Secure Boot) blocks it")
+    if shutil.which("v4l2-ctl") is None:
+        fatal("v4l2-ctl not found; install v4l-utils")
+
+
+def fatal(msg):
+    print("asus-camera-led: " + msg, file=sys.stderr)
+    sys.exit(EX_CONFIG)
+
+
+def set_led(lit):
+    with open(DBG + "/dev_id", "w") as f:
+        f.write("0x00060078")
+    with open(DBG + "/ctrl_param", "w") as f:
+        f.write("5" if lit else "4")
+    with open(DBG + "/devs") as f:
+        f.read()
+
+
+def camera_blocked():
+    for dev in sorted(glob.glob("/dev/video*")):
+        r = subprocess.run(["v4l2-ctl", "-d", dev, "--get-ctrl", "privacy"],
+                           capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.startswith("privacy:"):
+            return r.stdout.split(":")[1].strip() == "1"
+    return None
+
+
+def hidraw_node(interface):
+    """hidraw node of one USB interface of the keyboard, found by sysfs path
+    (the HID instance number is a global counter and depends on probe order)."""
+    for dev in glob.glob("/sys/bus/hid/devices/0003:0B05:8854.*"):
+        if f":1.{interface}/" in os.path.realpath(dev) + "/":
+            nodes = glob.glob(dev + "/hidraw/hidraw*")
+            if nodes:
+                return "/dev/" + os.path.basename(nodes[0])
+    sys.exit(f"{NAME}: keyboard 0B05:8854 not found")
+
+
+check_prerequisites()
+fd = os.open(hidraw_node(1), os.O_RDONLY)
+# At boot this service can start in the same second uvcvideo registers the
+# webcam, so give the privacy control a few seconds to appear.
+for attempt in range(10):
+    blocked = camera_blocked()
+    if blocked is not None:
+        set_led(blocked)
+        break
+    time.sleep(1)
+else:
+    print("asus-camera-led: no webcam with a 'privacy' control found; "
+          "LED left as is until the next Fn+F10 press", file=sys.stderr)
+while True:
+    data = os.read(fd, 64)
+    if len(data) >= 3 and tuple(data[:2]) == CAMERA_REPORT and data[2] in BLOCKED:
+        set_led(BLOCKED[data[2]])

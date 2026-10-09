@@ -1,0 +1,32 @@
+#!/bin/bash
+# The Zenbook UX7602 keyboard (USB 0B05:8854) is missing from hid-asus's ID
+# table, so it lands on hid-generic and its vendor Fn hotkeys are dropped.
+# Register the ID with hid-asus and move the hotkey interface over.
+set -euo pipefail
+
+# The ".NNNN" suffix of a HID device is a counter shared by every HID device
+# in the system, so it depends on probe order. Find the vendor (0xff31) +
+# consumer-control interface, USB interface 1, by its sysfs path instead.
+DEV=
+for d in /sys/bus/hid/devices/0003:0B05:8854.*; do
+    case "$(readlink -f "$d")" in */*:1.1/*) DEV=$(basename "$d") ;; esac
+done
+if [ -z "$DEV" ]; then
+    echo "asus-kbd-8854: hotkey interface of keyboard 0B05:8854 not found" >&2
+    exit 1
+fi
+# QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD | QUIRK_HID_FN_LOCK
+# (the last one makes Fn+Esc toggle Fn lock; F1-F12 without Fn is the default)
+QUIRKS=4820
+
+modprobe hid_asus
+# HID drivers have no remove_id: a registration lasts until hid_asus is
+# unloaded, and the first one wins. After changing QUIRKS, reboot or
+# "rmmod hid_asus" before re-running this.
+echo "0003 0B05 8854 $QUIRKS" > /sys/bus/hid/drivers/asus/new_id
+
+driver=$(basename "$(readlink /sys/bus/hid/devices/$DEV/driver 2>/dev/null)" 2>/dev/null || true)
+if [ -n "$driver" ]; then
+    echo "$DEV" > "/sys/bus/hid/drivers/$driver/unbind"
+fi
+echo "$DEV" > /sys/bus/hid/drivers/asus/bind

@@ -1,0 +1,4 @@
+# Let the "video" group drive the mic-mute key LED, so micmute-led-sync can set
+# it from the user session. (brightnessctl 0.5+ can also reach LEDs through
+# logind for an active graphical session; this rule covers everything else.)
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="platform::micmute", RUN+="/bin/chgrp video /sys/class/leds/%k/brightness", RUN+="/bin/chmod g+w /sys/class/leds/%k/brightness"

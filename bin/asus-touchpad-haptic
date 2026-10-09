@@ -1,0 +1,71 @@
+#!/usr/bin/python3 -I
+"""Haptic click strength for the ASUS Zenbook UX7602 touchpad (I2C 093A:3F01).
+
+The touchpad exposes a HID "Simple Haptic Controller / Intensity" feature
+(report 0x09, 0-100) that Windows sets on every boot and resume. Linux's
+hid-multitouch doesn't touch it, so the pad keeps whatever value its
+controller happens to wake up with.
+
+The firmware only accepts 0 (click disabled), 25, 50, 75 and 100; any other
+value is silently ignored. It can't be read back, so "get" prints the value
+this tool last wrote.
+
+Usage: asus-touchpad-haptic get | set 0|25|50|75|100 | restore
+"""
+import fcntl, glob, os, re, sys
+
+STATE = "/var/lib/asus-ux7602/touchpad-haptic"
+DEFAULT = 50
+LEVELS = (0, 25, 50, 75, 100)
+REPORT_ID = 0x09
+
+
+def hidiocsfeature(length):  # HIDIOCSFEATURE(length), see <linux/hidraw.h>
+    return (3 << 30) | (length << 16) | (ord("H") << 8) | 0x06
+
+
+def hidraw_node():
+    nodes = glob.glob("/sys/bus/hid/devices/0018:093A:3F01.*/hidraw/hidraw*")
+    if not nodes:
+        sys.exit("asus-touchpad-haptic: touchpad 093A:3F01 not found")
+    return "/dev/" + os.path.basename(nodes[0])
+
+
+def set_(value):
+    fd = os.open(hidraw_node(), os.O_RDWR)
+    try:
+        fcntl.ioctl(fd, hidiocsfeature(2), bytearray([REPORT_ID, value]))
+    finally:
+        os.close(fd)
+
+
+def saved():
+    try:
+        with open(STATE) as f:
+            v = int(f.read().strip())
+        if v in LEVELS:
+            return v
+    except (OSError, ValueError):
+        pass
+    return DEFAULT
+
+
+def main(argv):
+    cmd = argv[0] if argv else ""
+    arg = argv[1] if len(argv) > 1 else ""
+    if cmd == "get":
+        pass
+    elif cmd == "set" and re.fullmatch(r"\d{1,3}", arg) and int(arg) in LEVELS:
+        set_(int(arg))
+        os.makedirs(os.path.dirname(STATE), exist_ok=True)
+        with open(STATE, "w") as f:
+            f.write(arg + "\n")
+    elif cmd == "restore":
+        set_(saved())
+    else:
+        sys.exit(__doc__.strip())
+    print(saved())
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

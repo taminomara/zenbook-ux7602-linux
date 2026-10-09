@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore ASUS keyboard backlight colour and level at boot
+# The lighting commands go to the keyboard that asus-kbd-8854 rebinds.
+After=asus-kbd-8854.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/asus-kbd-rgb restore
+
+[Install]
+WantedBy=multi-user.target

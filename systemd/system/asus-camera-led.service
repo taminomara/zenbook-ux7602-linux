@@ -1,0 +1,16 @@
+[Unit]
+Description=Sync ASUS F10 camera LED with webcam state
+After=asus-kbd-8854.service
+# The LED is only reachable through the asus-nb-wmi debugfs interface.
+ConditionPathExists=/sys/kernel/debug/asus-nb-wmi
+
+[Service]
+ExecStart=/usr/local/sbin/asus-camera-led
+Restart=always
+RestartSec=3
+# 78 = the script found a permanent problem (debugfs locked down, v4l2-ctl
+# missing) and already logged it; retrying would only fill the journal.
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=multi-user.target

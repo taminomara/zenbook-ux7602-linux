@@ -1,0 +1,16 @@
+[Unit]
+Description=ASUS UX7602: keyboard backlight off across suspend, haptics restored on resume
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/asus-kbd-rgb sleep
+# Both tolerate failure ("-"): if one device is slow to come back after
+# resume, the other still gets restored and the unit does not end up failed.
+ExecStop=-/usr/local/sbin/asus-touchpad-haptic restore
+ExecStop=-/usr/local/sbin/asus-kbd-rgb wake
+
+[Install]
+WantedBy=sleep.target

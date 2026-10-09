@@ -1,0 +1,8 @@
+[Unit]
+Description=Restore ASUS touchpad haptic click strength
+# Started by udev (70-asus-touchpad-haptic.rules) once the touchpad's hidraw
+# node exists, so the restore cannot run before the device is there.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/asus-touchpad-haptic restore

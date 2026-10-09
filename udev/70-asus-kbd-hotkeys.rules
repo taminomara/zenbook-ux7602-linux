@@ -1,0 +1,10 @@
+# Give the logged-in user access to the hotkey interface (USB interface 1) of
+# the ASUS 0B05:8854 keyboard, so a user service can see keys the kernel
+# doesn't map (Fn+F10 camera toggle). The typing interface stays root-only.
+#
+# Two rules on purpose: KERNELS== and ATTRS{}== in one rule must match the same
+# parent device, but the HID device (which carries the VID:PID) and the USB
+# interface (which carries bInterfaceNumber) are different parents. The private
+# ENV variable (leading dot) carries the first match into the second rule.
+SUBSYSTEM=="hidraw", KERNELS=="0003:0B05:8854.*", ENV{.asus_kbd_8854}="1"
+ENV{.asus_kbd_8854}=="1", ATTRS{bInterfaceNumber}=="01", TAG+="uaccess"

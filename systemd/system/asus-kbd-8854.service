@@ -1,0 +1,11 @@
+[Unit]
+Description=Bind ASUS 0B05:8854 keyboard hotkeys to hid-asus
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/asus-kbd-8854
+
+[Install]
+WantedBy=multi-user.target

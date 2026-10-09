@@ -1,0 +1,40 @@
+// Example niri binds for the ASUS Zenbook UX7602, covering the keys that reach
+// the compositor once the fixes in this repo are installed. Commands are for
+// the noctalia shell; replace them with whatever your shell / OSD uses.
+//
+// Keys that need NO bind, because firmware or the kernel handles them:
+//   Fn+F7   keyboard backlight level (keyboard firmware, after asus-kbd-rgb init)
+//   Fn+F10  webcam on/off (firmware; LED and notification come from the
+//           asus-camera-led and asus-hotkey-notify services)
+//   Fn+Esc  Fn lock (hid-asus, via the QUIRK_HID_FN_LOCK flag)
+//
+// niri has no runtime touchpad toggle. examples/niri/touchpad-toggle flips a
+// one-line include between "input { touchpad { off } }" and empty, and niri
+// reloads it. Install the script on PATH and add this to config.kdl after the
+// include that holds your input section:
+//   include "./cfg/touchpad-state.kdl"
+
+binds {
+    // Audio (Fn+F1/F2/F3, Fn+F9). The mic-mute LED follows PipeWire's mute
+    // state through the micmute-led-sync service, whatever toggles the mute.
+    XF86AudioRaiseVolume    allow-when-locked=true { spawn "noctalia" "msg" "volume-up"; }
+    XF86AudioLowerVolume    allow-when-locked=true { spawn "noctalia" "msg" "volume-down"; }
+    XF86AudioMute           allow-when-locked=true { spawn "noctalia" "msg" "volume-mute"; }
+    XF86AudioMicMute        allow-when-locked=true { spawn "noctalia" "msg" "mic-mute"; }
+
+    // Screen brightness (Fn+F4/F5)
+    XF86MonBrightnessUp     allow-when-locked=true { spawn "noctalia" "msg" "brightness-up"; }
+    XF86MonBrightnessDown   allow-when-locked=true { spawn "noctalia" "msg" "brightness-down"; }
+
+    // Touchpad toggle (Fn+F6)
+    XF86TouchpadToggle      allow-when-locked=true { spawn "touchpad-toggle"; }
+
+    // Fn+F8 and Fn+F11 arrive as the Windows chords Super+P ("project") and
+    // Super+Shift+S ("snip"), so these fire for the keys and the chords alike.
+    Mod+P                   { spawn "noctalia" "msg" "panel-toggle" "control-center" "monitor"; }
+    Mod+Shift+S             { spawn "noctalia" "msg" "screenshot-region"; }
+
+    // Optional: keyboard backlight from a bind instead of Fn+F7.
+    // Needs the sudoers drop-in described in the README.
+    // Mod+F7                  { spawn "sudo" "-n" "/usr/local/sbin/asus-kbd-rgb" "cycle"; }
+}

@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Handle Zenbook UX7602 hotkeys that hid-asus leaves unmapped.
+
+They reach us only as raw vendor reports (5a <code> ...) on the keyboard's
+hotkey interface:
+  5a 85 <state>  Fn+F10, after the firmware toggled the webcam itself
+                 (state 0x10 = camera blocked, 0x01 = available)
+"""
+import glob, os, shutil, subprocess, sys
+
+NAME = "asus-hotkey-notify"
+CAMERA_REPORT = (0x5A, 0x85)  # followed by <state>
+CAMERA_STATES = {0x10: "disabled", 0x01: "enabled"}
+
+# code -> command, for unmapped keys that are plain key presses (none yet;
+# 0x86 is Fn+F12, 0x9d was seen once with an unknown origin)
+KEYS = {}
+
+
+def notify(title, body):
+    """noctalia's own notifier when the shell is installed, notify-send otherwise."""
+    if shutil.which("noctalia"):
+        subprocess.run(["noctalia", "msg", "notification-show", title, body])
+    else:
+        subprocess.run(["notify-send", "-a", title, title, body])
+
+
+def hidraw_node(interface):
+    """hidraw node of one USB interface of the keyboard, found by sysfs path
+    (the HID instance number is a global counter and depends on probe order)."""
+    for dev in glob.glob("/sys/bus/hid/devices/0003:0B05:8854.*"):
+        if f":1.{interface}/" in os.path.realpath(dev) + "/":
+            nodes = glob.glob(dev + "/hidraw/hidraw*")
+            if nodes:
+                return "/dev/" + os.path.basename(nodes[0])
+    sys.exit(f"{NAME}: keyboard 0B05:8854 not found")
+
+
+fd = os.open(hidraw_node(1), os.O_RDONLY)
+while True:
+    data = os.read(fd, 64)
+    if len(data) < 2 or data[0] != 0x5A:
+        continue
+    if tuple(data[:2]) == CAMERA_REPORT and len(data) >= 3 and data[2] in CAMERA_STATES:
+        notify("Camera", CAMERA_STATES[data[2]])
+    elif data[1] in KEYS:
+        subprocess.run(KEYS[data[1]])

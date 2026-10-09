@@ -1,0 +1,3 @@
+# Restore the touchpad's haptic click strength as soon as its hidraw node
+# appears (I2C HID 093A:3F01), instead of racing it from a boot-time unit.
+ACTION=="add", SUBSYSTEM=="hidraw", KERNELS=="0018:093A:3F01.*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="asus-touchpad-haptic.service"
