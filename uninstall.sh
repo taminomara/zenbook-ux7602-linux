@@ -7,6 +7,16 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
+# Rebuild every initramfs. Distributions that boot through limine-mkinitcpio-hook
+# ship no presets, so mkinitcpio -P finds nothing there; its own tool does the job.
+rebuild_initramfs() {
+    if command -v limine-mkinitcpio >/dev/null; then
+        sudo limine-mkinitcpio
+    else
+        sudo mkinitcpio -P
+    fi
+}
+
 echo "== User parts"
 systemctl --user disable --now micmute-led-sync.service asus-hotkey-notify.service
 rm -f ~/.config/systemd/user/micmute-led-sync.service ~/.config/systemd/user/asus-hotkey-notify.service
@@ -19,7 +29,11 @@ echo "== System parts (sudo)"
 sudo systemctl disable --now asus-camera-led.service asus-ux7602-sleep.service asus-kbd-rgb.service asus-kbd-8854.service
 sudo rm -f /etc/systemd/system/asus-kbd-8854.service /etc/systemd/system/asus-kbd-rgb.service /etc/systemd/system/asus-ux7602-sleep.service /etc/systemd/system/asus-touchpad-haptic.service \
     /etc/systemd/system/asus-camera-led.service
-sudo rm -f /usr/local/sbin/asus-kbd-8854 /usr/local/sbin/asus-kbd-rgb /usr/local/sbin/asus-touchpad-haptic \
+if [ -e /etc/initcpio/install/asus-kbd-backlight ]; then
+    sudo rm -f /etc/initcpio/install/asus-kbd-backlight /etc/mkinitcpio.conf.d/30-asus-kbd-backlight.conf
+    rebuild_initramfs
+fi
+sudo rm -f /usr/local/sbin/asus-kbd-8854 /usr/local/sbin/asus-kbd-rgb /usr/local/sbin/asus-kbd-rgb-initrd /usr/local/sbin/asus-touchpad-haptic \
     /usr/local/sbin/asus-camera-led
 # The sudoers drop-in is not created by install.sh; the README's Settings section
 # tells the user to create it by hand, so it is cleaned up here.

@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+# Keyboard backlight for the ASUS Zenbook UX7602 (USB 0B05:8854), initramfs
+# edition: a cut-down asus-kbd-rgb for the disk-encryption passphrase prompt.
+#
+# Python does not fit in an initramfs; perl does, because ioctl is built in.
+# This must not "use" any module, not even strict or Fcntl: the initramfs has
+# only the interpreter and its libraries, none of @INC.
+#
+# Protocol as in asus-kbd-rgb: 64-byte HID feature reports on USB interface 0.
+#
+# Usage: asus-kbd-rgb-initrd /dev/hidrawN BRIGHTNESS(0-3) [RRGGBB]
+
+my $name = 'asus-kbd-rgb-initrd';
+my ($dev, $brightness, $color) = @ARGV;
+unless (defined $dev && defined $brightness && $brightness =~ /^[0-3]$/
+        && (!defined $color || $color =~ /^[0-9a-fA-F]{6}$/)) {
+    die "usage: $name /dev/hidrawN BRIGHTNESS(0-3) [RRGGBB]\n";
+}
+
+sysopen(my $fh, $dev, 2) or die "$name: $dev: $!\n";    # 2 = O_RDWR
+
+sub report {
+    my $buf = substr(pack('C*', @_) . ("\0" x 64), 0, 64);
+    # 0xC0404806 = HIDIOCSFEATURE(64), see <linux/hidraw.h>
+    ioctl($fh, 0xC0404806, $buf) or die "$name: $dev: HIDIOCSFEATURE: $!\n";
+}
+
+report(0x5A, unpack('C*', 'ASUS Tech.Inc.'));
+if (defined $color) {
+    my @rgb = map { hex } $color =~ /../g;
+    report(0x5C, 0xA0, 0, 0, @rgb);
+    report(0x5C, 0xA5, 0, 0, @rgb);
+}
+report(0x5A, 0xBA, 0xC5, 0xC4, $brightness);
+close $fh;

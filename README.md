@@ -12,6 +12,7 @@ patches or rebuilds the kernel.
 | Most Fn hotkeys dead (brightness, touchpad, mic mute, ...) | Keyboard `0b05:8854` is missing from `hid-asus`'s ID table and falls back to `hid-generic` | `asus-kbd-8854` registers the ID with `hid-asus` at boot and rebinds the hotkey interface |
 | Fn+Esc (Fn lock) does nothing | Same; needs the driver's Fn-lock quirk | Same registration, with `QUIRK_HID_FN_LOCK` |
 | Keyboard backlight dark / not controllable | Firmware only accepts lighting commands on USB interface 0; the kernel LED uses interface 1 | `asus-kbd-rgb` talks to the keyboard over hidraw; restored at boot, off across suspend |
+| Keyboard dark at the disk-encryption passphrase prompt | Same, and the backlight comes up dark after a cold boot, before `asus-kbd-rgb` runs | `asus-kbd-backlight` mkinitcpio hook lights it from a udev rule in the initramfs |
 | Mic-mute key LED never lights | PipeWire mutes in software and never drives the LED | `micmute-led-sync` user service follows the default source's mute state |
 | Camera key (Fn+F10) LED never lights, no feedback | Key code unmapped by the kernel; LED is a GPIO behind an unused WMI ID | `asus-camera-led` (LED) and `asus-hotkey-notify` (notification) read the raw key report |
 | Touchpad haptic click strength random after boot/resume, sometimes no click at all | Nothing sets the pad's HID haptic intensity feature | `asus-touchpad-haptic` sets it at boot and after resume |
@@ -24,9 +25,15 @@ patches or rebuilds the kernel.
 ./uninstall.sh
 ```
 
-Requirements: `python3`, `v4l-utils` (`v4l2-ctl`), `alsa-utils`, `brightnessctl`,
-`libnotify` (`notify-send`, used when `noctalia` is not on `PATH`), PipeWire with
-`pipewire-pulse` (`pactl`) and WirePlumber, and debugfs mounted (for the camera LED).
+Requirements: `python3`, `perl` (initramfs hook), `v4l-utils` (`v4l2-ctl`), `alsa-utils`,
+`brightnessctl`, `libnotify` (`notify-send`, used when `noctalia` is not on `PATH`),
+PipeWire with `pipewire-pulse` (`pactl`) and WirePlumber, and debugfs mounted (for
+the camera LED).
+
+The initramfs hook needs `mkinitcpio` (`install.sh` skips it on other initramfs
+generators) and rebuilds your images with `limine-mkinitcpio` where Limine's hook
+manages them (it ships no presets, so `mkinitcpio -P` finds nothing to build) and
+with `mkinitcpio -P` elsewhere.
 
 Kernel lockdown, which Secure Boot enables on most distributions, blocks writes to
 debugfs. The camera LED service then logs one message and stays stopped, and
@@ -74,6 +81,21 @@ sudo chmod 440 /etc/sudoers.d/asus-kbd-rgb && sudo visudo -cf /etc/sudoers.d/asu
 
 The `Defaults` line pins `PATH` for that command, so the rule stays limited to
 the script even on systems whose sudoers policy does not set `secure_path`.
+
+## Keyboard backlight at the disk-encryption passphrase prompt
+
+The `asus-kbd-backlight` mkinitcpio hook (`/etc/initcpio/install`, enabled through
+`/etc/mkinitcpio.conf.d/30-asus-kbd-backlight.conf`) puts `asus-kbd-rgb-initrd`, a
+perl cut of `asus-kbd-rgb` (python does not fit in an initramfs; perl has `ioctl`
+built in and needs no modules), and a udev rule into the image. The rule runs it the
+moment the keyboard's interface 0 hidraw node appears, so the keys are lit before
+the passphrase prompt. It works with both the `udev` and the `systemd` hook and
+needs the `keyboard` hook, which every encrypted setup already has.
+
+The level and colour are the saved `asus-kbd-rgb` settings at the time the image is
+built, with a saved level of 0 raised to 1. After changing them, rebuild the
+images (`sudo limine-mkinitcpio`, or `sudo mkinitcpio -P` with presets) if you want
+the prompt to match; otherwise it catches up at the next kernel update.
 
 ## Hardware findings behind the scripts
 

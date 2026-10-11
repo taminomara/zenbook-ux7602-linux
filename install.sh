@@ -9,10 +9,20 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
+# Rebuild every initramfs. Distributions that boot through limine-mkinitcpio-hook
+# ship no presets, so mkinitcpio -P finds nothing there; its own tool does the job.
+rebuild_initramfs() {
+    if command -v limine-mkinitcpio >/dev/null; then
+        sudo limine-mkinitcpio
+    else
+        sudo mkinitcpio -P
+    fi
+}
+
 # Check everything up front, so a missing tool does not stop the script halfway
 # with the system half installed.
 missing=
-for tool in python3 v4l2-ctl brightnessctl pactl notify-send amixer; do
+for tool in python3 perl v4l2-ctl brightnessctl pactl notify-send amixer; do
     command -v "$tool" >/dev/null || missing="$missing $tool"
 done
 if [ -n "$missing" ]; then
@@ -42,7 +52,7 @@ if [ -d /var/lib/asus-kbd-rgb ] && [ ! -d /var/lib/asus-ux7602 ]; then
     [ -f /var/lib/asus-kbd-rgb/haptic ] && sudo mv /var/lib/asus-kbd-rgb/haptic /var/lib/asus-ux7602/touchpad-haptic
     sudo rm -rf /var/lib/asus-kbd-rgb
 fi
-sudo install -Dm755 -t /usr/local/sbin bin/asus-kbd-8854 bin/asus-kbd-rgb bin/asus-touchpad-haptic bin/asus-camera-led
+sudo install -Dm755 -t /usr/local/sbin bin/asus-kbd-8854 bin/asus-kbd-rgb bin/asus-kbd-rgb-initrd bin/asus-touchpad-haptic bin/asus-camera-led
 sudo install -Dm644 -t /etc/systemd/system systemd/system/asus-kbd-8854.service \
     systemd/system/asus-kbd-rgb.service systemd/system/asus-ux7602-sleep.service systemd/system/asus-touchpad-haptic.service systemd/system/asus-camera-led.service
 sudo install -Dm644 -t /etc/udev/rules.d udev/70-asus-kbd-hotkeys.rules udev/70-asus-micmute-led.rules udev/70-asus-touchpad-haptic.rules
@@ -53,6 +63,15 @@ sudo systemctl restart asus-kbd-8854.service asus-kbd-rgb.service
 sudo udevadm trigger --subsystem-match=hidraw --action=add
 sudo udevadm trigger --subsystem-match=leds --action=add
 sudo systemctl restart asus-camera-led.service
+
+if command -v mkinitcpio >/dev/null; then
+    echo "== Initramfs hook: keyboard backlight at the disk passphrase prompt (sudo)"
+    sudo install -Dm644 initcpio/asus-kbd-backlight /etc/initcpio/install/asus-kbd-backlight
+    sudo install -Dm644 initcpio/30-asus-kbd-backlight.conf /etc/mkinitcpio.conf.d/30-asus-kbd-backlight.conf
+    rebuild_initramfs
+else
+    echo "warning: no mkinitcpio; skipping the initramfs hook (keyboard stays dark at the disk passphrase prompt)" >&2
+fi
 
 echo "== User scripts, units and WirePlumber rule"
 install -Dm755 -t ~/.local/bin user-bin/micmute-led-sync user-bin/asus-hotkey-notify

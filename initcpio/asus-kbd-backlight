@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# mkinitcpio hook: light the keyboard backlight of the ASUS Zenbook UX7602 in
+# early userspace, so the disk-encryption passphrase is typed on a lit keyboard.
+#
+# The backlight only answers to HID feature reports on USB interface 0 of the
+# keyboard (see README.md), and the keyboard comes up dark after a cold boot.
+# This ships asus-kbd-rgb-initrd and the perl interpreter it needs,
+# and a udev rule that runs it as soon as that interface's hidraw node appears.
+# Works with both the udev and the systemd initramfs; needs the keyboard hook
+# for the USB host modules. Position in HOOKS does not matter.
+#
+# Level and colour are the asus-kbd-rgb settings saved when the image is built
+# (so they update on the next mkinitcpio -P, not when the setting changes).
+
+build() {
+    local state=/var/lib/asus-ux7602/kbd-rgb.json brightness= color=
+    if [[ -r "$state" ]]; then
+        brightness=$(sed -nE 's/.*"brightness": *([0-3]).*/\1/p' "$state")
+        color=$(sed -nE 's/.*"color": *"([0-9a-f]{6})".*/\1/p' "$state")
+    fi
+    # Off is a valid saved setting but no use at a passphrase prompt.
+    [[ "$brightness" =~ ^[1-3]$ ]] || brightness=1
+    [[ "$color" =~ ^[0-9a-f]{6}$ ]] || color=ffffff
+
+    # mkinitcpio only warns about a script's interpreter; add it ourselves.
+    add_binary perl
+    add_binary /usr/local/sbin/asus-kbd-rgb-initrd
+
+    # Two rules on purpose: KERNELS== and ATTRS{}== in one rule must match the
+    # same parent, but the VID:PID is on the HID device and the interface
+    # number on the USB interface above it (as in udev/70-asus-kbd-hotkeys.rules).
+    printf '%s\n' \
+        'ACTION=="add", SUBSYSTEM=="hidraw", KERNELS=="0003:0B05:8854.*", ENV{.asus_kbd_8854}="1"' \
+        "ENV{.asus_kbd_8854}==\"1\", ATTRS{bInterfaceNumber}==\"00\", RUN+=\"/usr/local/sbin/asus-kbd-rgb-initrd /dev/%k $brightness $color\"" \
+        | add_file - /usr/lib/udev/rules.d/90-asus-kbd-backlight.rules 644
+}
+
+help() {
+    cat <<HELPEOF
+Lights the ASUS Zenbook UX7602 keyboard backlight as soon as the keyboard
+appears in early userspace, so the disk-encryption passphrase prompt is lit.
+Uses the level and colour saved by asus-kbd-rgb at image build time.
+HELPEOF
+}
+
+# vim: set ft=sh ts=4 sw=4 et:
