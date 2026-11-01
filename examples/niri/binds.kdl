@@ -9,7 +9,7 @@
 //   Fn+Esc  Fn lock (hid-asus, via the QUIRK_HID_FN_LOCK flag)
 //
 // niri has no runtime touchpad toggle. examples/niri/touchpad-toggle flips a
-// one-line include between "input { touchpad { off } }" and empty, and niri
+// one-line include between "input { touchpad { off; }; }" and empty, and niri
 // reloads it. Install the script on PATH and add this to config.kdl after the
 // include that holds your input section:
 //   include "./cfg/touchpad-state.kdl"

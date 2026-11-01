@@ -1,13 +1,14 @@
 #!/bin/sh
 # Toggle the touchpad under niri, which has no runtime toggle action: flip a
-# one-line config include and let niri reload it. Later sections merge over
-# earlier ones, so the touchpad settings in input.kdl stay in effect.
+# one-line config include and let niri reload it. While off, this section
+# replaces the one in input.kdl, so it must be included after input.kdl.
 state_file=${XDG_CONFIG_HOME:-$HOME/.config}/niri/cfg/touchpad-state.kdl
-if grep -qx 'input { touchpad { off } }' "$state_file" 2>/dev/null; then
-    printf '// Written by touchpad-toggle; "input { touchpad { off } }" disables it.\n' > "$state_file"
+off='input { touchpad { off; }; }'
+if grep -qxF "$off" "$state_file" 2>/dev/null; then
+    printf '// Written by touchpad-toggle; "%s" disables it.\n' "$off" > "$state_file"
     state=enabled
 else
-    printf 'input { touchpad { off } }\n' > "$state_file"
+    printf '%s\n' "$off" > "$state_file"
     state=disabled
 fi
 if command -v noctalia >/dev/null; then
